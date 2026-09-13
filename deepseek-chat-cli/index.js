@@ -1,7 +1,12 @@
-import "dotenv/config";
+#!/usr/bin/env node
+import dotenv from "dotenv";
 import readline from "node:readline/promises";
 import { stdin, stdout } from "node:process";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import OpenAI from "openai";
+
+dotenv.config({ path: join(dirname(fileURLToPath(import.meta.url)), ".env") });
 
 const apiKey = process.env.DEEPSEEK_API_KEY;
 if (!apiKey) {

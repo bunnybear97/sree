@@ -1,0 +1,112 @@
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+  background: #0f0f10;
+  color: #e6e6e6;
+  height: 100vh;
+}
+.app { display: flex; height: 100vh; }
+
+.sidebar {
+  width: 220px;
+  background: #17171a;
+  border-right: 1px solid #26262a;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.brand { font-weight: 700; font-size: 16px; margin-bottom: 8px; }
+.new-chat-btn, .settings-btn {
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 10px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.settings-btn { background: #26262a; margin-top: auto; }
+.model-label { font-size: 12px; color: #9a9aa0; }
+
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.msg { max-width: 70%; padding: 10px 14px; border-radius: 10px; line-height: 1.4; white-space: pre-wrap; }
+.msg.user { align-self: flex-end; background: #2563eb; color: white; }
+.msg.assistant { align-self: flex-start; background: #1f1f23; }
+.msg.error { align-self: flex-start; background: #4a1d1d; color: #ffb4b4; }
+.msg .meta { display: block; font-size: 11px; opacity: 0.6; margin-top: 4px; }
+
+.chat-form {
+  display: flex;
+  gap: 8px;
+  padding: 16px;
+  border-top: 1px solid #26262a;
+}
+.chat-form input {
+  flex: 1;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background: #1a1a1d;
+  color: white;
+  font-size: 14px;
+}
+.chat-form button {
+  padding: 12px 20px;
+  border-radius: 8px;
+  border: none;
+  background: #2563eb;
+  color: white;
+  cursor: pointer;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal.hidden { display: none; }
+.modal-box {
+  background: #1a1a1d;
+  padding: 24px;
+  border-radius: 12px;
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.modal-box label { font-size: 12px; color: #9a9aa0; margin-top: 8px; }
+.modal-box input {
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background: #0f0f10;
+  color: white;
+}
+.modal-actions { display: flex; gap: 8px; margin-top: 16px; }
+.modal-actions button {
+  flex: 1;
+  padding: 10px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  background: #2563eb;
+  color: white;
+}
+.modal-actions button.secondary { background: #333; }
