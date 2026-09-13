@@ -37,7 +37,7 @@ while (true) {
     });
     const reply = response.choices[0].message.content;
     history.push({ role: "assistant", content: reply });
-    console.log(`\nDeepSeek: ${reply}\n`);
+    console.log(`\nDeepSeek [${response.model}]: ${reply}\n`);
   } catch (err) {
     console.error("Request failed:", err.message);
   }
