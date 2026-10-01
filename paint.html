@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Paint</title>
+<style>
+  :root {
+    --bg: #eceef2;
+    --panel: #ffffff;
+    --ink: #1f2430;
+    --muted: #6b7280;
+    --line: #e3e6eb;
+    --accent: #4f46e5;
+    --accent-soft: #eef0ff;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex;
+    font: 14px/1.3 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    overflow: hidden;
+    -webkit-user-select: none; user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  /* ---------- Toolbar ---------- */
+  #toolbar {
+    width: 208px;
+    flex: none;
+    background: var(--panel);
+    border-right: 1px solid var(--line);
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    overflow-y: auto;
+  }
+  .section { display: flex; flex-direction: column; gap: 8px; }
+  .section > .label {
+    font-size: 11px; font-weight: 600; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .row { display: flex; gap: 6px; }
+  .row > * { flex: 1; }
+
+  .btn {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+    padding: 8px 4px;
+    font: inherit; font-size: 12px; color: var(--ink);
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: background .12s, border-color .12s, color .12s;
+  }
+  .btn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .btn:hover:not(:disabled) { background: #f6f7f9; }
+  .btn.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .btn:disabled { opacity: .35; cursor: default; }
+  .btn.wide { flex-direction: row; justify-content: flex-start; padding: 9px 12px; gap: 10px; font-size: 13px; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover:not(:disabled) { background: #4338ca; }
+  .btn.danger:hover:not(:disabled) { color: #dc2626; border-color: #fca5a5; background: #fef2f2; }
+
+  .size-head { display: flex; justify-content: space-between; align-items: baseline; }
+  .size-head output { font-variant-numeric: tabular-nums; font-weight: 600; }
+  input[type=range] { width: 100%; accent-color: var(--accent); margin: 4px 0; }
+
+  .color-row { display: flex; align-items: center; gap: 10px; }
+  .color-row span { font-size: 13px; }
+  input[type=color] {
+    width: 40px; height: 32px; padding: 0; border: 1px solid var(--line);
+    border-radius: 8px; background: none; cursor: pointer; flex: none;
+  }
+  input[type=color]::-webkit-color-swatch-wrapper { padding: 2px; }
+  input[type=color]::-webkit-color-swatch { border: 0; border-radius: 6px; }
+  input[type=color]::-moz-color-swatch { border: 0; border-radius: 6px; }
+
+  .swatches { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; }
+  .swatch {
+    aspect-ratio: 1; border-radius: 50%; border: 1px solid rgba(0,0,0,.15);
+    padding: 0; cursor: pointer;
+  }
+  .swatch:hover { transform: scale(1.15); }
+
+  /* ---------- Canvas area ---------- */
+  #stage {
+    position: relative;
+    flex: 1;
+    min-width: 0; min-height: 0;
+    margin: 12px;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #ffffff;
+    box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 4px 16px rgba(0,0,0,.06);
+    touch-action: none;
+    cursor: crosshair;
+  }
+  #stage canvas { position: absolute; left: 0; top: 0; touch-action: none; }
+  #overlay { pointer-events: none; }
+  #ring {
+    position: fixed; left: 0; top: 0; pointer-events: none; display: none;
+    border: 1px solid #000; border-radius: 50%;
+    box-shadow: 0 0 0 1px #fff;
+    transform: translate(-50%, -50%);
+    z-index: 10;
+  }
+
+  /* ---------- Narrow screens: toolbar on top ---------- */
+  @media (max-width: 760px) {
+    body { flex-direction: column; }
+    #toolbar {
+      width: auto; flex-direction: row; gap: 18px; overflow-x: auto; overflow-y: hidden;
+      border-right: 0; border-bottom: 1px solid var(--line); padding: 10px 12px;
+    }
+    .section { flex: none; }
+    .section .row { flex-wrap: nowrap; }
+    .section .row > * { min-width: 58px; }
+    .btn.wide { flex-direction: column; justify-content: center; padding: 8px 4px; gap: 4px; font-size: 12px; }
+    .size-section { min-width: 150px; }
+    #stage { margin: 8px; }
+  }
+</style>
+</head>
+<body>
+
+<aside id="toolbar">
+  <div class="section">
+    <div class="label">Tool</div>
+    <div class="row">
+      <button class="btn active" id="tool-brush" title="Brush (B)">
+        <svg viewBox="0 0 24 24"><path d="m9.06 11.9 8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z"/></svg>
+        Brush
+      </button>
+      <button class="btn" id="tool-eraser" title="Eraser (E)">
+        <svg viewBox="0 0 24 24"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg>
+        Eraser
+      </button>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="label">Brush type</div>
+    <div class="row">
+      <button class="btn active" data-brush="round" title="Round">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" fill="currentColor" stroke="none"/></svg>
+        Round
+      </button>
+      <button class="btn" data-brush="soft" title="Soft / airbrush">
+        <svg viewBox="0 0 24 24"><defs><radialGradient id="softIcon"><stop offset="0" stop-color="currentColor"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></radialGradient></defs><circle cx="12" cy="12" r="10" fill="url(#softIcon)" stroke="none"/></svg>
+        Soft
+      </button>
+      <button class="btn" data-brush="water" title="Watercolor">
+        <svg viewBox="0 0 24 24"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></svg>
+        Water
+      </button>
+    </div>
+  </div>
+
+  <div class="section size-section">
+    <div class="size-head"><span class="label">Size</span><output id="size-out">12 px</output></div>
+    <input type="range" id="size" min="1" max="50" value="12">
+  </div>
+
+  <div class="section">
+    <div class="label">Color</div>
+    <div class="color-row"><input type="color" id="color" value="#1e293b"><span>Brush color</span></div>
+    <div class="swatches" id="swatches"></div>
+  </div>
+
+  <div class="section">
+    <div class="label">Background</div>
+    <div class="color-row"><input type="color" id="bg" value="#ffffff"><span>Canvas color</span></div>
+  </div>
+
+  <div class="section">
+    <div class="label">Actions</div>
+    <div class="row">
+      <button class="btn" id="undo" title="Undo (Ctrl+Z)" disabled>
+        <svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+        Undo
+      </button>
+      <button class="btn" id="redo" title="Redo (Ctrl+Y)" disabled>
+        <svg viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>
+        Redo
+      </button>
+    </div>
+    <button class="btn wide danger" id="clear">
+      <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+      Clear canvas
+    </button>
+    <button class="btn wide primary" id="save">
+      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>
+      Save as PNG
+    </button>
+  </div>
+</aside>
+
+<main id="stage">
+  <canvas id="paint"></canvas>
+  <canvas id="overlay"></canvas>
+</main>
+<div id="ring"></div>
+
+<script>
+(() => {
+  'use strict';
+
+  const $ = id => document.getElementById(id);
+  const stage = $('stage'), paint = $('paint'), overlay = $('overlay'), ring = $('ring');
+  const pctx = paint.getContext('2d'), octx = overlay.getContext('2d');
+
+  const MAX_UNDO = 20;
+  const WATER_ALPHA = 0.5;           // opacity of a whole watercolor stroke
+
+  const state = {
+    tool: 'brush',                   // 'brush' | 'eraser'
+    brush: 'round',                  // 'round' | 'soft' | 'water'
+    size: 12,
+    color: '#1e293b',
+    bg: '#ffffff',
+  };
+
+  let dpr = 1, cssW = 0, cssH = 0;
+  const undoStack = [], redoStack = [];
+
+  /* ---------- Canvas sizing (grow-only, keeps drawing on resize) ---------- */
+  function fit() {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    const ndpr = Math.min(window.devicePixelRatio || 1, 2);
+    const nw = Math.max(cssW, w), nh = Math.max(cssH, h);
+    if (nw === cssW && nh === cssH && ndpr === dpr) return;
+
+    let old = null;
+    if (cssW) {
+      old = document.createElement('canvas');
+      old.width = paint.width; old.height = paint.height;
+      old.getContext('2d').drawImage(paint, 0, 0);
+    }
+    const scale = old ? ndpr / dpr : 1;
+    dpr = ndpr; cssW = nw; cssH = nh;
+    for (const c of [paint, overlay]) {
+      c.width = Math.round(nw * dpr); c.height = Math.round(nh * dpr);
+      c.style.width = nw + 'px'; c.style.height = nh + 'px';
+      c.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    if (old) {
+      pctx.save();
+      pctx.setTransform(1, 0, 0, 1, 0, 0);
+      pctx.drawImage(old, 0, 0, old.width * scale, old.height * scale);
+      pctx.restore();
+    }
+  }
+  window.addEventListener('resize', fit);
+  fit();
+
+  /* ---------- Undo / redo ---------- */
+  function snapshot() {
+    const c = document.createElement('canvas');
+    c.width = paint.width; c.height = paint.height;
+    c.getContext('2d').drawImage(paint, 0, 0);
+    return { c, bg: state.bg };
+  }
+  function restore(s) {
+    pctx.save();
+    pctx.setTransform(1, 0, 0, 1, 0, 0);
+    pctx.clearRect(0, 0, paint.width, paint.height);
+    pctx.drawImage(s.c, 0, 0);
+    pctx.restore();
+    setBg(s.bg);
+  }
+  function pushUndo(s = snapshot()) {
+    undoStack.push(s);
+    if (undoStack.length > MAX_UNDO) undoStack.shift();
+    redoStack.length = 0;
+    updateButtons();
+  }
+  function undo() {
+    if (drawing || !undoStack.length) return;
+    redoStack.push(snapshot());
+    restore(undoStack.pop());
+    updateButtons();
+  }
+  function redo() {
+    if (drawing || !redoStack.length) return;
+    undoStack.push(snapshot());
+    restore(redoStack.pop());
+    updateButtons();
+  }
+  function updateButtons() {
+    $('undo').disabled = !undoStack.length;
+    $('redo').disabled = !redoStack.length;
+  }
+
+  /* ---------- Brush engines ---------- */
+  let drawing = false, pointerId = null;
+  let prev, lastMid, tctx, sprite, spacing;
+
+  function hexToRgb(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+
+  // Pre-rendered soft-edged dot used by the soft and watercolor brushes.
+  function makeSprite(kind) {
+    const d = Math.max(2, Math.ceil(state.size * dpr));
+    const c = document.createElement('canvas');
+    c.width = c.height = d;
+    const g = c.getContext('2d');
+    const [r, gr, b] = hexToRgb(state.color);
+    const rgba = a => `rgba(${r},${gr},${b},${a})`;
+    const grad = g.createRadialGradient(d / 2, d / 2, 0, d / 2, d / 2, d / 2);
+    if (kind === 'soft') {
+      grad.addColorStop(0, rgba(1));
+      grad.addColorStop(0.35, rgba(0.6));
+      grad.addColorStop(1, rgba(0));
+    } else {                         // watercolor: slightly denser rim
+      grad.addColorStop(0, rgba(0.55));
+      grad.addColorStop(0.7, rgba(0.8));
+      grad.addColorStop(1, rgba(0));
+    }
+    g.fillStyle = grad;
+    g.fillRect(0, 0, d, d);
+    return c;
+  }
+
+  function stamp(x, y) {
+    const s = state.size;
+    if (state.brush === 'water') {
+      const k = 0.85 + Math.random() * 0.3, j = s * 0.07;
+      const sz = s * k;
+      tctx.globalAlpha = 0.07 + Math.random() * 0.06;
+      tctx.drawImage(sprite, x - sz / 2 + (Math.random() - .5) * 2 * j, y - sz / 2 + (Math.random() - .5) * 2 * j, sz, sz);
+    } else {
+      tctx.globalAlpha = 0.16;
+      tctx.drawImage(sprite, x - s / 2, y - s / 2, s, s);
+    }
+  }
+
+  const isStamped = () => state.tool === 'brush' && state.brush !== 'round';
+
+  function dot(p) {
+    if (isStamped()) { stamp(p.x, p.y); return; }
+    tctx.beginPath();
+    tctx.arc(p.x, p.y, state.size / 2, 0, Math.PI * 2);
+    tctx.fill();
+  }
+
+  // Quadratic curve a -> b with control point c.
+  function segment(a, c, b) {
+    if (!isStamped()) {
+      tctx.beginPath();
+      tctx.moveTo(a.x, a.y);
+      tctx.quadraticCurveTo(c.x, c.y, b.x, b.y);
+      tctx.stroke();
+      return;
+    }
+    const len = Math.hypot(c.x - a.x, c.y - a.y) + Math.hypot(b.x - c.x, b.y - c.y);
+    const n = Math.max(1, Math.ceil(len / spacing));
+    for (let i = 1; i <= n; i++) {
+      const t = i / n, m = 1 - t;
+      stamp(m * m * a.x + 2 * m * t * c.x + t * t * b.x,
+            m * m * a.y + 2 * m * t * c.y + t * t * b.y);
+    }
+  }
+
+  function pointFrom(e) {
+    const r = paint.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  }
+
+  function startStroke(e) {
+    drawing = true; pointerId = e.pointerId;
+    pushUndo();
+
+    const water = state.tool === 'brush' && state.brush === 'water';
+    tctx = water ? octx : pctx;
+    tctx.save();
+    if (water) {
+      octx.clearRect(0, 0, cssW, cssH);
+      overlay.style.opacity = WATER_ALPHA;
+    }
+    if (state.tool === 'eraser') {
+      tctx.globalCompositeOperation = 'destination-out';
+      tctx.fillStyle = tctx.strokeStyle = '#000';
+    } else {
+      tctx.fillStyle = tctx.strokeStyle = state.color;
+    }
+    tctx.lineWidth = state.size;
+    tctx.lineCap = tctx.lineJoin = 'round';
+    if (isStamped()) {
+      sprite = makeSprite(state.brush);
+      spacing = Math.max(1, state.size * (water ? 0.06 : 0.1));
+    }
+
+    prev = lastMid = pointFrom(e);
+    dot(prev);
+  }
+
+  function moveStroke(e) {
+    const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+    for (const ev of (events.length ? events : [e])) {
+      const p = pointFrom(ev);
+      if (p.x === prev.x && p.y === prev.y) continue;
+      const mid = { x: (prev.x + p.x) / 2, y: (prev.y + p.y) / 2 };
+      segment(lastMid, prev, mid);
+      lastMid = mid; prev = p;
+    }
+  }
+
+  function endStroke() {
+    if (!drawing) return;
+    segment(lastMid, { x: (lastMid.x + prev.x) / 2, y: (lastMid.y + prev.y) / 2 }, prev);
+    tctx.restore();
+    if (tctx === octx) {             // commit the watercolor layer at its transparency
+      pctx.save();
+      pctx.globalAlpha = WATER_ALPHA;
+      pctx.drawImage(overlay, 0, 0, cssW, cssH);
+      pctx.restore();
+      octx.clearRect(0, 0, cssW, cssH);
+    }
+    drawing = false; pointerId = null;
+  }
+
+  /* ---------- Pointer input (mouse, touch, pen) ---------- */
+  stage.addEventListener('pointerdown', e => {
+    if (drawing || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    e.preventDefault();
+    stage.setPointerCapture(e.pointerId);
+    startStroke(e);
+  });
+  stage.addEventListener('pointermove', e => {
+    moveRing(e);
+    if (drawing && e.pointerId === pointerId) moveStroke(e);
+  });
+  const finish = e => { if (drawing && e.pointerId === pointerId) endStroke(); };
+  stage.addEventListener('pointerup', finish);
+  stage.addEventListener('pointercancel', finish);
+  stage.addEventListener('contextmenu', e => e.preventDefault());
+
+  /* ---------- Brush-size cursor ring ---------- */
+  function moveRing(e) {
+    if (e.pointerType === 'touch') { ring.style.display = 'none'; return; }
+    ring.style.display = 'block';
+    ring.style.left = e.clientX + 'px';
+    ring.style.top = e.clientY + 'px';
+  }
+  function sizeRing() {
+    const d = Math.max(state.size, 2);
+    ring.style.width = ring.style.height = d + 'px';
+  }
+  stage.addEventListener('pointerleave', () => { ring.style.display = 'none'; });
+
+  /* ---------- UI wiring ---------- */
+  function setTool(t) {
+    state.tool = t;
+    $('tool-brush').classList.toggle('active', t === 'brush');
+    $('tool-eraser').classList.toggle('active', t === 'eraser');
+  }
+  $('tool-brush').onclick = () => setTool('brush');
+  $('tool-eraser').onclick = () => setTool('eraser');
+
+  document.querySelectorAll('[data-brush]').forEach(btn => {
+    btn.onclick = () => {
+      state.brush = btn.dataset.brush;
+      document.querySelectorAll('[data-brush]').forEach(b => b.classList.toggle('active', b === btn));
+      setTool('brush');
+    };
+  });
+
+  $('size').oninput = e => {
+    state.size = +e.target.value;
+    $('size-out').textContent = state.size + ' px';
+    sizeRing();
+  };
+  sizeRing();
+
+  function setColor(c) {
+    state.color = c; $('color').value = c;
+    setTool('brush');
+  }
+  $('color').oninput = e => setColor(e.target.value);
+  ['#1e293b', '#ef4444', '#f97316', '#facc15', '#22c55e', '#06b6d4', '#3b82f6', '#a855f7',
+   '#ec4899', '#92400e', '#64748b', '#94a3b8', '#d1d5db', '#ffffff', '#14532d', '#000000']
+    .forEach(c => {
+      const s = document.createElement('button');
+      s.className = 'swatch'; s.style.background = c; s.title = c;
+      s.onclick = () => setColor(c);
+      $('swatches').appendChild(s);
+    });
+
+  // Background: lives behind the (transparent) paint layer, so the eraser reveals it.
+  function setBg(c) {
+    state.bg = c; $('bg').value = c; stage.style.background = c;
+  }
+  let bgPending = null;
+  $('bg').addEventListener('input', e => {
+    if (!bgPending) bgPending = snapshot();     // state before the change, for undo
+    setBg(e.target.value);
+  });
+  $('bg').addEventListener('change', () => {
+    if (bgPending) { pushUndo(bgPending); bgPending = null; }
+  });
+
+  $('undo').onclick = undo;
+  $('redo').onclick = redo;
+  $('clear').onclick = () => {
+    if (drawing) return;
+    pushUndo();
+    pctx.save();
+    pctx.setTransform(1, 0, 0, 1, 0, 0);
+    pctx.clearRect(0, 0, paint.width, paint.height);
+    pctx.restore();
+  };
+
+  $('save').onclick = () => {
+    const w = Math.round(stage.clientWidth * dpr), h = Math.round(stage.clientHeight * dpr);
+    const out = document.createElement('canvas');
+    out.width = w; out.height = h;
+    const g = out.getContext('2d');
+    g.fillStyle = state.bg;
+    g.fillRect(0, 0, w, h);
+    g.drawImage(paint, 0, 0);
+    out.toBlob(blob => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'painting.png';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }, 'image/png');
+  };
+
+  /* ---------- Keyboard shortcuts ---------- */
+  window.addEventListener('keydown', e => {
+    const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
+    if (mod && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+    else if (mod && k === 'y') { e.preventDefault(); redo(); }
+    else if (!mod && !e.altKey && e.target.tagName !== 'INPUT') {
+      if (k === 'b') setTool('brush');
+      else if (k === 'e') setTool('eraser');
+    }
+  });
+})();
+</script>
+</body>
+</html>
