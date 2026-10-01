@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sunset Over a Mountain Lake</title>
+<style>
+  html,body{margin:0;height:100%;background:#1a1226;color:#eadcf0;font-family:system-ui,sans-serif}
+  body{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:12px;box-sizing:border-box}
+  canvas{max-width:100%;max-height:calc(100vh - 80px);width:auto;height:auto;aspect-ratio:3/2;box-shadow:0 10px 40px #000a;border-radius:3px}
+  button{font:600 15px system-ui;padding:10px 22px;border:0;border-radius:999px;background:#f08a4b;color:#2a1330;cursor:pointer}
+  button:hover{background:#ffa56b}
+</style>
+</head>
+<body>
+<canvas id="c" width="1200" height="800"></canvas>
+<button id="save">Save as PNG</button>
+<script>
+(function(){
+const W=1200,H=800,HZ=470;           // canvas size, horizon line
+const cv=document.getElementById('c'),g=cv.getContext('2d');
+
+// seeded RNG so the painting is identical each load
+let seed=20261001;
+function rnd(){seed=(seed*1664525+1013904223)>>>0;return seed/4294967296}
+const R=(a,b)=>a+rnd()*(b-a);
+
+function lerp(a,b,t){return a+(b-a)*t}
+function mix(c1,c2,t){return c1.map((v,i)=>Math.round(lerp(v,c2[i],t)))}
+function rgba(c,a){return `rgba(${c[0]},${c[1]},${c[2]},${a})`}
+
+// brush stroke: a main body plus a few bristle streaks
+function stroke(x,y,len,th,col,a,ang){
+  g.save();g.translate(x,y);g.rotate(ang||0);g.lineCap='round';
+  g.strokeStyle=rgba(col,a);g.lineWidth=th;
+  g.beginPath();g.moveTo(-len/2,0);g.lineTo(len/2,R(-1,1)*th*.2);g.stroke();
+  const n=Math.max(2,th/3|0);
+  for(let i=0;i<n;i++){
+    const o=R(-.5,.5)*th, c=col.map(v=>Math.max(0,Math.min(255,v+R(-18,18))));
+    g.strokeStyle=rgba(c,a*.6);g.lineWidth=R(.6,1.8);
+    g.beginPath();g.moveTo(-len/2+R(0,len*.1),o);g.lineTo(len/2-R(0,len*.1),o+R(-1,1));g.stroke();
+  }
+  g.restore();
+}
+
+// ---------- SKY ----------
+const stops=[[0,[38,22,72]],[.30,[92,50,120]],[.55,[200,90,130]],[.80,[250,150,95]],[1,[255,205,130]]];
+function skyColor(t){
+  for(let i=1;i<stops.length;i++) if(t<=stops[i][0]){
+    const [t0,c0]=stops[i-1],[t1,c1]=stops[i];return mix(c0,c1,(t-t0)/(t1-t0));}
+  return stops[stops.length-1][1];
+}
+let grd=g.createLinearGradient(0,0,0,HZ);
+stops.forEach(s=>grd.addColorStop(s[0],rgba(s[1],1)));
+g.fillStyle=grd;g.fillRect(0,0,W,HZ+4);
+
+// painterly sky: horizontal strokes sampled from the gradient
+for(let i=0;i<2600;i++){
+  const y=R(0,HZ),t=y/HZ,c=skyColor(Math.min(1,Math.max(0,t+R(-.07,.07))));
+  stroke(R(-50,W+50),y,R(60,200),R(8,22),c,R(.10,.25),R(-.04,.04));
+}
+
+// sun glow
+const SX=720,SY=HZ-75;
+let glow=g.createRadialGradient(SX,SY,0,SX,SY,420);
+glow.addColorStop(0,'rgba(255,240,190,.95)');glow.addColorStop(.12,'rgba(255,205,130,.7)');
+glow.addColorStop(.4,'rgba(255,140,100,.28)');glow.addColorStop(1,'rgba(255,120,120,0)');
+g.fillStyle=glow;g.fillRect(0,0,W,HZ);
+g.fillStyle='rgba(255,246,215,.95)';g.beginPath();g.arc(SX,SY,34,0,7);g.fill();
+for(let i=0;i<60;i++) stroke(SX+R(-50,50),SY+R(-45,45),R(20,60),R(5,12),[255,235,180],.12,R(-.2,.2));
+
+// clouds: stacked soft strokes, lit from below by the sun
+function cloud(cx,cy,w,h,tone){
+  const n=Math.round(w*h/14);
+  for(let i=0;i<n;i++){
+    const u=(rnd()+rnd()+rnd()-1.5)/1.5,v=(rnd()+rnd()+rnd()-1.5)/1.5;
+    const x=cx+u*w/2,y=cy+v*h/2+Math.sin(u*5)*h*.12;
+    const lit=Math.max(0,Math.min(1,(v+1)/2*.7+(1-Math.abs(x-SX)/800)*.35+R(-.1,.1)));
+    const dark=mix([88,52,120],[210,110,120],tone), light=mix([255,170,120],[255,230,175],tone);
+    stroke(x,y,R(25,80),R(5,13),mix(dark,light,lit),R(.06,.18),R(-.08,.08));
+  }
+}
+cloud(260,150,520,90,.2);cloud(900,110,460,70,.3);cloud(560,250,600,80,.55);
+cloud(1040,290,380,60,.7);cloud(160,330,420,60,.8);cloud(660,370,360,40,1);cloud(380,405,300,30,1);
+
+// ---------- MOUNTAINS ----------
+function ridge(base,amp,rough,seedOff){
+  const pts=[];const n=256;
+  const v=new Array(n+1).fill(0);
+  function mid(l,r,a){if(r-l<2)return;const m=(l+r)>>1;v[m]=(v[l]+v[r])/2+R(-a,a);mid(l,m,a*rough);mid(m,r,a*rough)}
+  v[0]=R(-amp,amp)*.5;v[n]=R(-amp,amp)*.5;mid(0,n,amp);
+  for(let i=0;i<=n;i++){const x=i/n*W;pts.push([x,base+v[i]+Math.max(0,1-Math.abs(x-SX)/230)*(HZ-base-18)*.9]);}
+  return pts;
+}
+function mountain(pts,top,bot,hazeCol,hazeA,strokeTone){
+  g.beginPath();g.moveTo(0,HZ+6);pts.forEach(p=>g.lineTo(p[0],p[1]));g.lineTo(W,HZ+6);g.closePath();
+  const yMin=Math.min(...pts.map(p=>p[1]));
+  const gr=g.createLinearGradient(0,yMin,0,HZ);gr.addColorStop(0,rgba(top,1));gr.addColorStop(1,rgba(bot,1));
+  g.fillStyle=gr;g.fill();
+  g.save();g.clip();
+  // brushwork following slopes
+  for(let i=0;i<1100;i++){
+    const x=R(0,W),idx=Math.min(255,x/W*256|0),y0=pts[idx][1],y=R(y0,HZ);
+    const t=(y-yMin)/(HZ-yMin);
+    const c=mix(top,bot,Math.min(1,t));
+    stroke(x,y,R(30,90),R(6,15),mix(c,strokeTone,R(0,.5)),R(.1,.28),R(-.5,.5)+(x<SX?.25:-.25));
+  }
+  // warm rim light on sun-facing ridge
+  for(let i=0;i<pts.length-1;i++){
+    const d=Math.abs(pts[i][0]-SX)/W;
+    g.strokeStyle=rgba([255,170,120],Math.max(0,.45-d*.8));g.lineWidth=2.5;
+    g.beginPath();g.moveTo(pts[i][0],pts[i][1]+1);g.lineTo(pts[i+1][0],pts[i+1][1]+1);g.stroke();
+  }
+  // atmospheric haze at the base
+  const hz=g.createLinearGradient(0,HZ-120,0,HZ);hz.addColorStop(0,rgba(hazeCol,0));hz.addColorStop(1,rgba(hazeCol,hazeA));
+  g.fillStyle=hz;g.fillRect(0,HZ-120,W,130);
+  g.restore();
+}
+mountain(ridge(HZ-150,70,.55),[176,120,160],[246,170,150],[255,190,150],.75,[200,130,160]);
+mountain(ridge(HZ-110,75,.56),[122,78,134],[214,128,134],[250,160,140],.55,[160,100,140]);
+mountain(ridge(HZ-60,60,.58),[62,38,92],[130,72,110],[210,120,120],.4,[90,50,100]);
+
+// far shoreline tree line
+for(let i=0;i<420;i++){
+  const x=R(0,W),h=R(6,22);
+  stroke(x,HZ-h/2+2,R(5,10),h,[40,24,64],R(.3,.6),Math.PI/2+R(-.15,.15));
+}
+
+// ---------- LAKE ----------
+// base water colour from sky
+let lg=g.createLinearGradient(0,HZ,0,H);
+lg.addColorStop(0,'rgb(246,168,120)');lg.addColorStop(.35,'rgb(170,92,128)');lg.addColorStop(1,'rgb(48,30,84)');
+g.fillStyle=lg;g.fillRect(0,HZ,W,H-HZ);
+
+// mirrored reflection of sky+mountains, rippled strip by strip
+const snap=document.createElement('canvas');snap.width=W;snap.height=HZ;
+snap.getContext('2d').drawImage(cv,0,0,W,HZ,0,0,W,HZ);
+for(let y=HZ;y<H;y++){
+  const d=y-HZ,sy=Math.max(0,HZ-1-d*1.15|0);
+  const wob=Math.sin(d*.35+rnd()*.5)*(1+d*.045)+R(-1,1)*d*.02;
+  g.globalAlpha=Math.max(.18,.78-d/520);
+  g.drawImage(snap,0,sy,W,1,wob,y,W,1);
+}
+g.globalAlpha=1;
+
+// horizontal ripple strokes
+for(let i=0;i<2400;i++){
+  const y=R(HZ+2,H),d=(y-HZ)/(H-HZ),nearSun=Math.exp(-Math.pow((0),2));
+  const warm=mix([250,170,130],[120,70,130],d), cool=mix([80,60,140],[30,22,70],d);
+  stroke(R(-40,W+40),y,R(30,60+d*160),R(1.5,3+d*8),mix(warm,cool,R(0,1)),R(.06,.2),R(-.01,.01));
+}
+
+// sun path glitter: bright dashes narrowing to the horizon
+for(let i=0;i<900;i++){
+  const d=Math.pow(rnd(),1.4),y=HZ+4+d*(H-HZ),spread=14+d*150;
+  const x=SX+R(-1,1)*spread*(rnd()<.5?1:.55);
+  stroke(x,y,R(8,30)+d*70,R(1,2.4+d*3),[255,rnd()<.5?225:200,rnd()<.5?160:120],R(.25,.7)*(1-d*.5),R(-.01,.01));
+}
+let sg=g.createLinearGradient(0,HZ,0,H);
+sg.addColorStop(0,'rgba(255,220,160,.35)');sg.addColorStop(.6,'rgba(255,170,110,.08)');sg.addColorStop(1,'rgba(255,170,110,0)');
+g.save();g.beginPath();g.moveTo(SX-30,HZ);g.lineTo(SX+30,HZ);g.lineTo(SX+240,H);g.lineTo(SX-240,H);g.closePath();g.fillStyle=sg;g.fill();g.restore();
+
+// ---------- FOREGROUND ----------
+// left shore with grass and rocks
+g.beginPath();g.moveTo(0,H);g.lineTo(0,640);
+for(let x=0;x<=340;x+=20) g.lineTo(x,640+Math.pow(x/340,1.5)*140+R(-8,8));
+g.lineTo(380,H);g.closePath();g.fillStyle='rgb(22,14,40)';g.fill();
+g.save();g.clip();
+for(let i=0;i<300;i++) stroke(R(0,360),R(650,H),R(30,70),R(6,14),[mix([28,18,52],[60,34,70],rnd())][0],R(.2,.5),R(-.4,.4));
+g.restore();
+// reeds
+function reed(x,y,h,lean){
+  g.strokeStyle=rgba([18,10,34],.95);g.lineWidth=R(1.5,3.2);g.lineCap='round';
+  g.beginPath();g.moveTo(x,y);g.quadraticCurveTo(x+lean*.3,y-h*.6,x+lean,y-h);g.stroke();
+  if(rnd()<.35){g.lineWidth=5;g.strokeStyle='rgba(60,32,60,.95)';
+    g.beginPath();g.moveTo(x+lean*.88,y-h*.9);g.lineTo(x+lean,y-h-14);g.stroke();}
+}
+for(let i=0;i<110;i++) reed(R(-10,330),R(690,H-8),R(50,200),R(-30,40));
+for(let i=0;i<40;i++) reed(R(1000,1210),R(H-30,H+5),R(40,130),R(-35,15));
+// right foreground fringe
+g.beginPath();g.moveTo(W,H);g.lineTo(W,745);
+for(let x=W;x>=1010;x-=20) g.lineTo(x,745+(W-x)*.12*-1+R(-6,6)+ (W-x)*.15);
+g.lineTo(1010,H);g.closePath();g.fillStyle='rgb(20,12,38)';g.fill();
+
+// boat with small figure, with reflection
+function boat(bx,by,s){
+  g.save();g.translate(bx,by);g.scale(s,s);
+  // reflection (inverted, faint)
+  g.save();g.scale(1,-.6);g.globalAlpha=.35;g.fillStyle='rgb(30,16,50)';
+  g.beginPath();g.moveTo(-90,0);g.quadraticCurveTo(0,-20,95,-8);g.lineTo(80,-4);g.quadraticCurveTo(0,28,-70,-4);g.closePath();g.fill();
+  g.fillRect(-4,-4,8,60);g.restore();
+  for(let i=0;i<14;i++) stroke(R(-80,80)*s,(18+i*3.5)*s*0+R(10,48),R(40,110),R(2,4),[255,190,130],R(.1,.25),0);
+  // hull
+  g.fillStyle='rgb(26,14,42)';
+  g.beginPath();g.moveTo(-95,-10);g.quadraticCurveTo(0,-2,100,-24);g.lineTo(84,-6);g.quadraticCurveTo(10,14,-68,2);g.closePath();g.fill();
+  g.strokeStyle='rgba(255,170,120,.55)';g.lineWidth=2;g.beginPath();g.moveTo(-95,-10);g.quadraticCurveTo(0,-2,100,-24);g.stroke();
+  // figure
+  g.fillStyle='rgb(26,14,42)';
+  g.beginPath();g.arc(-4,-64,9,0,7);g.fill();
+  g.beginPath();g.moveTo(-18,-8);g.quadraticCurveTo(-20,-48,-4,-55);g.quadraticCurveTo(12,-48,12,-8);g.closePath();g.fill();
+  // oar
+  g.strokeStyle='rgb(26,14,42)';g.lineWidth=3;g.beginPath();g.moveTo(-6,-38);g.lineTo(70,-4);g.lineTo(96,18);g.stroke();
+  g.restore();
+}
+boat(880,690,1.15);
+// ripples around the boat
+for(let i=0;i<28;i++) stroke(880+R(-140,140),R(688,730),R(20,70),R(1.5,3),[255,190,140],R(.15,.4),0);
+
+// ---------- ATMOSPHERE & FINISH ----------
+// drifting light mist over water
+let mist=g.createLinearGradient(0,HZ-20,0,HZ+90);
+mist.addColorStop(0,'rgba(255,200,160,0)');mist.addColorStop(.4,'rgba(255,190,160,.22)');mist.addColorStop(1,'rgba(255,190,160,0)');
+g.fillStyle=mist;g.fillRect(0,HZ-20,W,110);
+
+// birds
+g.strokeStyle='rgba(40,20,60,.8)';g.lineWidth=2;g.lineCap='round';
+[[300,210,12],[330,190,9],[360,215,10],[455,160,7]].forEach(([x,y,s])=>{
+  g.beginPath();g.moveTo(x-s,y);g.quadraticCurveTo(x-s/2,y-s*.7,x,y);g.quadraticCurveTo(x+s/2,y-s*.7,x+s,y);g.stroke();});
+
+// warm colour wash to unify the palette
+g.globalCompositeOperation='soft-light';
+let wash=g.createLinearGradient(0,0,0,H);
+wash.addColorStop(0,'rgba(120,80,200,.35)');wash.addColorStop(.6,'rgba(255,150,100,.35)');wash.addColorStop(1,'rgba(60,40,140,.3)');
+g.fillStyle=wash;g.fillRect(0,0,W,H);
+g.globalCompositeOperation='source-over';
+
+// canvas-weave grain + paint noise
+const img=g.getImageData(0,0,W,H),d=img.data;
+for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+  const i=(y*W+x)*4,weave=((x%4<2)^(y%4<2))?3:-3,n=(rnd()-.5)*20+weave;
+  d[i]+=n;d[i+1]+=n;d[i+2]+=n;
+}
+g.putImageData(img,0,0);
+
+// vignette
+let vg=g.createRadialGradient(W/2,H/2,H*.35,W/2,H/2,W*.68);
+vg.addColorStop(0,'rgba(20,8,40,0)');vg.addColorStop(1,'rgba(20,8,40,.5)');
+g.fillStyle=vg;g.fillRect(0,0,W,H);
+
+// ---------- SAVE ----------
+document.getElementById('save').onclick=()=>{
+  cv.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);
+    a.download='sunset-over-mountain-lake.png';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);},'image/png');
+};
+})();
+</script>
+</body>
+</html>
