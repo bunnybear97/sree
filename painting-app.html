@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Paint</title>
+<style>
+  :root {
+    --bg: #1f2230; --panel: #2a2e40; --panel-2: #353a52; --line: #43486a;
+    --text: #e8eaf6; --muted: #98a0c4; --accent: #6c8cff;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; margin: 0; overflow: hidden; background: var(--bg);
+    color: var(--text); font: 13px/1.3 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-user-select: none; user-select: none; }
+  #app { display: flex; height: 100%; }
+
+  /* ---------- Toolbar ---------- */
+  #toolbar { width: 150px; flex: none; background: var(--panel); border-right: 1px solid var(--line);
+    padding: 12px 10px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+  .group { display: flex; flex-direction: column; gap: 6px; }
+  .group > h2 { margin: 0; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .row { display: flex; gap: 6px; }
+  .row > * { flex: 1; }
+  button.btn { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 9px;
+    background: var(--panel-2); color: var(--text); border: 1px solid transparent; border-radius: 8px;
+    font: inherit; cursor: pointer; text-align: left; touch-action: manipulation; }
+  button.btn:hover:not(:disabled) { background: #3f4565; }
+  button.btn.active { border-color: var(--accent); background: rgba(108,140,255,.18); }
+  button.btn:disabled { opacity: .35; cursor: default; }
+  button.btn svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor;
+    stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  button.btn.primary { background: var(--accent); color: #fff; justify-content: center; font-weight: 600; }
+  button.btn.primary:hover { background: #7f9bff !important; }
+  button.btn.danger:hover:not(:disabled) { background: #6b3343; }
+  .row button.btn { flex-direction: column; gap: 3px; padding: 7px 4px; text-align: center; font-size: 11px; }
+
+  .size-head { display: flex; justify-content: space-between; color: var(--muted); }
+  .size-head b { color: var(--text); font-weight: 600; }
+  input[type=range] { width: 100%; accent-color: var(--accent); margin: 4px 0; }
+  .color-line { display: flex; align-items: center; gap: 8px; }
+  .color-line label { flex: 1; color: var(--muted); }
+  input[type=color] { width: 40px; height: 30px; padding: 0; border: 2px solid var(--line);
+    border-radius: 8px; background: none; cursor: pointer; }
+  .swatches { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+  .swatches button { aspect-ratio: 1; border: 2px solid rgba(255,255,255,.15); border-radius: 50%;
+    padding: 0; cursor: pointer; touch-action: manipulation; }
+  .swatches button:hover { border-color: #fff; }
+
+  /* ---------- Stage ---------- */
+  #stage { position: relative; flex: 1; min-width: 0; overflow: hidden; background: #fff; }
+  #stage canvas { position: absolute; left: 0; top: 0; touch-action: none; cursor: crosshair; }
+  #cursor { position: absolute; pointer-events: none; border: 1px solid #000; border-radius: 50%;
+    box-shadow: 0 0 0 1px #fff; transform: translate(-50%, -50%); display: none; z-index: 2; }
+
+  /* ---------- Narrow screens: toolbar on top ---------- */
+  @media (max-width: 700px) {
+    #app { flex-direction: column; }
+    #toolbar { width: 100%; height: auto; max-height: 38%; border-right: 0; border-bottom: 1px solid var(--line);
+      flex-direction: row; flex-wrap: wrap; align-items: flex-start; gap: 10px 14px; padding: 8px; }
+    .group { min-width: 130px; flex: 1 1 130px; }
+    #cursor { display: none !important; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="toolbar">
+    <div class="group">
+      <h2>Tool</h2>
+      <div class="row">
+        <button class="btn active" id="tool-brush" title="Brush (B)">
+          <svg viewBox="0 0 24 24"><path d="M18.4 2.6a2 2 0 0 1 2.9 2.9L11 15.8l-3.9-3.9z"/><path d="M7.1 11.9C4.6 12 3 13.6 3 16c0 1.6-.8 2.7-1.5 3.5 3.5 1.7 8 .5 8.5-3.2"/></svg>
+          Brush</button>
+        <button class="btn" id="tool-eraser" title="Eraser (E)">
+          <svg viewBox="0 0 24 24"><path d="M20 20H9L3.6 14.6a2 2 0 0 1 0-2.8l8.2-8.2a2 2 0 0 1 2.8 0l6 6a2 2 0 0 1 0 2.8L13 20"/><path d="M7 9l8 8"/></svg>
+          Eraser</button>
+      </div>
+    </div>
+
+    <div class="group" id="type-group">
+      <h2>Brush type</h2>
+      <button class="btn active" data-type="round" title="Hard round brush">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="currentColor"/></svg>Round</button>
+      <button class="btn" data-type="air" title="Soft airbrush">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="currentColor"/><circle cx="12" cy="12" r="6.5" stroke-dasharray="1 3"/><circle cx="12" cy="12" r="10" stroke-dasharray="1 4"/></svg>Airbrush</button>
+      <button class="btn" data-type="water" title="Semi-transparent watercolor">
+        <svg viewBox="0 0 24 24"><path d="M12 3c3.5 4.5 6 7.5 6 11a6 6 0 0 1-12 0c0-3.5 2.5-6.5 6-11z"/></svg>Watercolor</button>
+    </div>
+
+    <div class="group">
+      <h2>Size</h2>
+      <div class="size-head"><span>Brush size</span><b><span id="size-val">12</span> px</b></div>
+      <input type="range" id="size" min="1" max="50" value="12">
+    </div>
+
+    <div class="group">
+      <h2>Color</h2>
+      <div class="color-line"><label for="color">Brush</label><input type="color" id="color" value="#1e1e1e"></div>
+      <div class="swatches" id="swatches"></div>
+      <div class="color-line" style="margin-top:6px"><label for="bg">Background</label><input type="color" id="bg" value="#ffffff"></div>
+    </div>
+
+    <div class="group">
+      <h2>Actions</h2>
+      <div class="row">
+        <button class="btn" id="undo" title="Undo (Ctrl+Z)" disabled>
+          <svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>Undo</button>
+        <button class="btn" id="redo" title="Redo (Ctrl+Y)" disabled>
+          <svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>Redo</button>
+      </div>
+      <button class="btn danger" id="clear" title="Clear canvas">
+        <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg>Clear canvas</button>
+      <button class="btn primary" id="save" title="Save as PNG">
+        <svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 20h16"/></svg>Save as PNG</button>
+    </div>
+  </aside>
+
+  <main id="stage">
+    <canvas id="canvas"></canvas>
+    <div id="cursor"></div>
+  </main>
+</div>
+
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const stage = $('stage'), cv = $('canvas'), ctx = cv.getContext('2d', { willReadFrequently: true });
+  const cursorEl = $('cursor');
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  const MAX_HISTORY = 40;
+
+  const state = { tool: 'brush', type: 'round', size: 12, color: '#1e1e1e', bg: '#ffffff' };
+  let cssW = 0, cssH = 0;
+
+  /* ---------- Canvas sizing (grows only, keeps drawing) ---------- */
+  function fit() {
+    const w = Math.max(cssW, stage.clientWidth), h = Math.max(cssH, stage.clientHeight);
+    if (w === cssW && h === cssH) return;
+    let tmp = null;
+    if (cv.width > 0) {
+      tmp = document.createElement('canvas');
+      tmp.width = cv.width; tmp.height = cv.height;
+      tmp.getContext('2d').drawImage(cv, 0, 0);
+    }
+    cssW = w; cssH = h;
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    cv.style.width = w + 'px'; cv.style.height = h + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (tmp) { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(tmp, 0, 0); ctx.restore(); }
+  }
+
+  /* ---------- History (snapshots of the drawing layer) ---------- */
+  let undoStack = [], redoStack = [];
+  const snap = () => ctx.getImageData(0, 0, cv.width, cv.height);
+  function restore(img) {
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.putImageData(img, 0, 0);
+    ctx.restore();
+  }
+  function pushHistory() {
+    undoStack.push(snap());
+    if (undoStack.length > MAX_HISTORY) undoStack.shift();
+    redoStack = [];
+    updateButtons();
+  }
+  function undo() {
+    if (undoStack.length < 2) return;
+    redoStack.push(undoStack.pop());
+    restore(undoStack[undoStack.length - 1]);
+    updateButtons();
+  }
+  function redo() {
+    if (!redoStack.length) return;
+    const img = redoStack.pop();
+    undoStack.push(img);
+    restore(img);
+    updateButtons();
+  }
+  function updateButtons() {
+    $('undo').disabled = undoStack.length < 2;
+    $('redo').disabled = redoStack.length === 0;
+  }
+
+  /* ---------- Brush engine ---------- */
+  const hexToRgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  let rgb = hexToRgb(state.color);
+
+  function stamp(x, y) {
+    const s = state.size, [r, g, b] = rgb;
+    if (state.type === 'air') {
+      const rad = s * 0.8, gr = ctx.createRadialGradient(x, y, 0, x, y, rad);
+      gr.addColorStop(0, `rgba(${r},${g},${b},0.22)`);
+      gr.addColorStop(1, `rgba(${r},${g},${b},0)`);
+      ctx.fillStyle = gr;
+      ctx.beginPath(); ctx.arc(x, y, rad, 0, 6.2832); ctx.fill();
+    } else { // watercolor: several faint, jittered, soft blobs that build up where they overlap
+      for (let i = 0; i < 2; i++) {
+        const jx = (Math.random() - .5) * s * 0.35, jy = (Math.random() - .5) * s * 0.35;
+        const rad = Math.max(0.8, s * 0.5 * (0.8 + Math.random() * 0.35));
+        const gr = ctx.createRadialGradient(x + jx, y + jy, 0, x + jx, y + jy, rad);
+        gr.addColorStop(0, `rgba(${r},${g},${b},0.07)`);
+        gr.addColorStop(0.75, `rgba(${r},${g},${b},0.05)`);
+        gr.addColorStop(1, `rgba(${r},${g},${b},0)`);
+        ctx.fillStyle = gr;
+        ctx.beginPath(); ctx.arc(x + jx, y + jy, rad, 0, 6.2832); ctx.fill();
+      }
+    }
+  }
+
+  const solid = () => state.tool === 'eraser' || state.type === 'round';
+
+  function dot(p) {
+    if (solid()) { ctx.beginPath(); ctx.arc(p.x, p.y, state.size / 2, 0, 6.2832); ctx.fill(); }
+    else stamp(p.x, p.y);
+  }
+
+  // Smooth segment: quadratic curve from midpoint a, via control point c, to midpoint b
+  function segment(a, c, b) {
+    if (solid()) {
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(c.x, c.y, b.x, b.y); ctx.stroke();
+      return;
+    }
+    const len = Math.hypot(c.x - a.x, c.y - a.y) + Math.hypot(b.x - c.x, b.y - c.y);
+    const spacing = Math.max(1, state.size * (state.type === 'air' ? 0.1 : 0.12));
+    const n = Math.max(1, Math.ceil(len / spacing));
+    for (let i = 1; i <= n; i++) {
+      const t = i / n, u = 1 - t;
+      stamp(u * u * a.x + 2 * u * t * c.x + t * t * b.x, u * u * a.y + 2 * u * t * c.y + t * t * b.y);
+    }
+  }
+
+  /* ---------- Pointer input (mouse + touch + pen) ---------- */
+  let drawing = false, pid = null, last = null, mid = null;
+
+  const pos = e => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+
+  function begin(p) {
+    rgb = hexToRgb(state.color);
+    ctx.globalCompositeOperation = state.tool === 'eraser' ? 'destination-out' : 'source-over';
+    ctx.fillStyle = ctx.strokeStyle = state.tool === 'eraser' ? '#000' : state.color;
+    ctx.lineWidth = state.size; ctx.lineCap = ctx.lineJoin = 'round';
+    last = mid = p;
+    dot(p);
+  }
+  function extend(p) {
+    const m = { x: (last.x + p.x) / 2, y: (last.y + p.y) / 2 };
+    segment(mid, last, m);
+    last = p; mid = m;
+  }
+
+  cv.addEventListener('pointerdown', e => {
+    if (drawing || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    e.preventDefault();
+    drawing = true; pid = e.pointerId;
+    cv.setPointerCapture(pid);
+    begin(pos(e));
+  });
+  cv.addEventListener('pointermove', e => {
+    moveCursor(e);
+    if (!drawing || e.pointerId !== pid) return;
+    const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+    for (const ev of (evs.length ? evs : [e])) extend(pos(ev));
+  });
+  function finish(e) {
+    if (!drawing || e.pointerId !== pid) return;
+    drawing = false;
+    segment(mid, last, last);
+    ctx.globalCompositeOperation = 'source-over';
+    pushHistory();
+  }
+  cv.addEventListener('pointerup', finish);
+  cv.addEventListener('pointercancel', finish);
+  cv.addEventListener('contextmenu', e => e.preventDefault());
+
+  /* ---------- Brush-size cursor (mouse only) ---------- */
+  function moveCursor(e) {
+    if (e.pointerType !== 'mouse') { cursorEl.style.display = 'none'; return; }
+    const r = stage.getBoundingClientRect();
+    cursorEl.style.display = 'block';
+    cursorEl.style.left = (e.clientX - r.left) + 'px';
+    cursorEl.style.top = (e.clientY - r.top) + 'px';
+  }
+  function sizeCursor() {
+    const d = Math.max(state.size, 3);
+    cursorEl.style.width = cursorEl.style.height = d + 'px';
+  }
+  cv.addEventListener('pointerleave', () => { cursorEl.style.display = 'none'; });
+
+  /* ---------- UI wiring ---------- */
+  function setTool(t) {
+    state.tool = t;
+    $('tool-brush').classList.toggle('active', t === 'brush');
+    $('tool-eraser').classList.toggle('active', t === 'eraser');
+    $('type-group').style.opacity = t === 'eraser' ? .4 : 1;
+  }
+  $('tool-brush').onclick = () => setTool('brush');
+  $('tool-eraser').onclick = () => setTool('eraser');
+
+  document.querySelectorAll('[data-type]').forEach(b => b.onclick = () => {
+    state.type = b.dataset.type;
+    document.querySelectorAll('[data-type]').forEach(x => x.classList.toggle('active', x === b));
+    setTool('brush');
+  });
+
+  $('size').oninput = e => { state.size = +e.target.value; $('size-val').textContent = state.size; sizeCursor(); };
+
+  function setColor(c) { state.color = c; $('color').value = c; setTool('brush'); }
+  $('color').oninput = e => setColor(e.target.value);
+
+  ['#1e1e1e', '#ffffff', '#e53935', '#fb8c00', '#fdd835', '#43a047', '#00acc1', '#1e88e5', '#8e24aa', '#8d6e63']
+    .forEach(c => {
+      const b = document.createElement('button');
+      b.style.background = c; b.title = c; b.onclick = () => setColor(c);
+      $('swatches').appendChild(b);
+    });
+
+  $('bg').oninput = e => { state.bg = e.target.value; stage.style.background = state.bg; };
+
+  $('undo').onclick = undo;
+  $('redo').onclick = redo;
+  $('clear').onclick = () => {
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height); ctx.restore();
+    pushHistory();
+  };
+
+  $('save').onclick = () => {
+    const out = document.createElement('canvas');
+    out.width = cv.width; out.height = cv.height;
+    const o = out.getContext('2d');
+    o.fillStyle = state.bg; o.fillRect(0, 0, out.width, out.height);
+    o.drawImage(cv, 0, 0);
+    out.toBlob(blob => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'painting.png';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }, 'image/png');
+  };
+
+  window.addEventListener('keydown', e => {
+    const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
+    if (mod && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+    else if (mod && k === 'y') { e.preventDefault(); redo(); }
+    else if (!mod && !e.target.matches('input')) {
+      if (k === 'b') setTool('brush'); else if (k === 'e') setTool('eraser');
+    }
+  });
+
+  window.addEventListener('resize', fit);
+
+  /* ---------- Init ---------- */
+  fit(); sizeCursor(); stage.style.background = state.bg;
+  pushHistory();
+})();
+</script>
+</body>
+</html>
