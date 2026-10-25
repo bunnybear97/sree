@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TradeMind — AI Trading Management</title>
+<meta name="description" content="Log trades, track performance, size risk, and get AI coaching on your trading habits.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="logo">◭</span> TradeMind</div>
+  <nav>
+    <a href="#dashboard">Dashboard</a>
+    <a href="#journal">Journal</a>
+    <a href="#risk">Risk</a>
+    <a href="#coach">AI Coach</a>
+  </nav>
+  <button id="demoBtn" class="ghost">Load demo data</button>
+</header>
+
+<main>
+  <section class="hero">
+    <h1>Trade with a plan. Review with AI.</h1>
+    <p>Your journal, risk calculator and an AI coach that spots the habits costing you money. Data stays in your browser.</p>
+  </section>
+
+  <section id="dashboard">
+    <div class="stats" id="stats"></div>
+    <div class="card">
+      <h2>Equity curve</h2>
+      <canvas id="chart" height="260"></canvas>
+      <p class="empty" id="chartEmpty">Add trades to see your equity curve.</p>
+    </div>
+  </section>
+
+  <section id="journal" class="grid2">
+    <div class="card">
+      <h2>Log a trade</h2>
+      <form id="tradeForm">
+        <label>Symbol <input name="symbol" required placeholder="AAPL" maxlength="12"></label>
+        <label>Side
+          <select name="side"><option value="long">Long</option><option value="short">Short</option></select>
+        </label>
+        <label>Entry <input name="entry" type="number" step="any" required></label>
+        <label>Exit <input name="exit" type="number" step="any" required></label>
+        <label>Quantity <input name="qty" type="number" step="any" min="0" required></label>
+        <label>Fees <input name="fees" type="number" step="any" value="0"></label>
+        <label>Date <input name="date" type="date" required></label>
+        <label>Setup
+          <select name="setup">
+            <option>Breakout</option><option>Pullback</option><option>Reversal</option>
+            <option>News</option><option>Other</option>
+          </select>
+        </label>
+        <label>Mood
+          <select name="mood">
+            <option value="calm">Calm</option><option value="confident">Confident</option>
+            <option value="fomo">FOMO</option><option value="revenge">Revenge</option>
+            <option value="anxious">Anxious</option>
+          </select>
+        </label>
+        <label class="wide">Notes <textarea name="notes" rows="2"></textarea></label>
+        <button class="primary wide" type="submit">Add trade</button>
+      </form>
+    </div>
+    <div class="card">
+      <h2>Trades <button id="clearBtn" class="ghost small">Clear all</button></h2>
+      <div class="tablewrap">
+        <table id="tradeTable">
+          <thead><tr><th>Date</th><th>Symbol</th><th>Side</th><th>Setup</th><th>Mood</th><th>P&amp;L</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p class="empty" id="tableEmpty">No trades yet.</p>
+    </div>
+  </section>
+
+  <section id="risk" class="card">
+    <h2>Position size calculator</h2>
+    <form id="riskForm" class="inline">
+      <label>Account size <input name="account" type="number" step="any" value="10000"></label>
+      <label>Risk % <input name="riskPct" type="number" step="any" value="1"></label>
+      <label>Entry <input name="entry" type="number" step="any" placeholder="100"></label>
+      <label>Stop loss <input name="stop" type="number" step="any" placeholder="97"></label>
+      <label>Target <input name="target" type="number" step="any" placeholder="109"></label>
+    </form>
+    <div class="stats" id="riskOut"></div>
+  </section>
+
+  <section id="coach" class="card">
+    <h2>AI coach</h2>
+    <p class="muted">Instant pattern analysis runs locally. Optionally add an Anthropic API key for a deeper written review — it is stored only in this browser and sent only to Anthropic.</p>
+    <ul id="insights"></ul>
+    <details>
+      <summary>Deeper review with Claude (optional)</summary>
+      <div class="inline">
+        <label>API key <input id="apiKey" type="password" placeholder="sk-ant-..." autocomplete="off"></label>
+        <button id="askBtn" class="primary">Review my trades</button>
+      </div>
+      <pre id="aiOut" class="aiout" hidden></pre>
+    </details>
+  </section>
+</main>
+
+<footer>Educational tool, not financial advice. Trading involves risk of loss.</footer>
+<script src="app.js"></script>
+</body>
+</html>
