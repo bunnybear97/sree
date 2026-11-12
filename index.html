@@ -1,440 +1,225 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Subhasree Babu | Portfolio</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
-  <link rel="stylesheet" href="style.css" />
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Star Catcher</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #05060f; overflow: hidden; }
+  body { display: flex; align-items: center; justify-content: center; }
+  canvas {
+    /* 480x640 (3:4), shrunk to fit smaller screens */
+    width: min(480px, 100vw, 75vh);
+    height: auto;
+    display: block;
+    touch-action: none;
+  }
+</style>
 </head>
 <body>
+<canvas id="game" width="480" height="640"></canvas>
+<script>
+(function () {
+  var canvas = document.getElementById('game');
+  var ctx = canvas.getContext('2d');
+  var W = 480, H = 640;
+  var GAME_TIME = 60, START_LIVES = 3;
+  var BASKET_W = 80, BASKET_H = 24, BASKET_Y = H - 50, BASKET_SPEED = 380;
+  var BASE_FALL = 150, FALL_STEP = 25, SPAWN_EVERY = 0.6, ROCK_CHANCE = 0.3;
 
-  <!-- Stars canvas — fixed full-screen background -->
-  <canvas id="stars-canvas"></canvas>
+  var state = 'start'; // 'start' | 'play' | 'over'
+  var score, lives, timeLeft, items, basketX, spawnTimer, overAt = 0;
+  var keys = { left: false, right: false };
+  var best = loadBest();
 
-  <!-- ───────────── NAVBAR ───────────── -->
-  <nav id="navbar">
-    <div class="nav-container">
-      <a href="#home" class="nav-logo" id="logo-link"><span class="nav-mark">SB</span>Subhasree<span class="dot">.</span></a>
-      <ul class="nav-links">
-        <li><a href="#about">About</a></li>
-        <li><a href="#experience">Experience</a></li>
-        <li><a href="#skills">Skills</a></li>
-        <li><a href="#projects">Projects</a></li>
-        <li><a href="#contact">Contact</a></li>
-      </ul>
-      <button class="hamburger" id="hamburger" aria-label="Menu">
-        <i class="fas fa-bars"></i>
-      </button>
-    </div>
-    <div class="mobile-menu" id="mobile-menu">
-      <ul>
-        <li><a href="#about" class="mob-link">About</a></li>
-        <li><a href="#experience" class="mob-link">Experience</a></li>
-        <li><a href="#skills" class="mob-link">Skills</a></li>
-        <li><a href="#projects" class="mob-link">Projects</a></li>
-        <li><a href="#contact" class="mob-link">Contact</a></li>
-      </ul>
-    </div>
-  </nav>
+  // Fixed background dots so the sky does not flicker
+  var sky = [];
+  for (var i = 0; i < 40; i++) sky.push([Math.random() * W, Math.random() * H, Math.random() * 1.5 + 0.5]);
 
-  <!-- ───────────── HERO ───────────── -->
-  <section class="hero" id="home">
-    <div class="hero-deco">
-      <div class="deco-dot"></div>
-      <div class="deco-line"></div>
-    </div>
+  function loadBest() {
+    try { return parseInt(localStorage.getItem('starCatcherBest'), 10) || 0; } catch (e) { return 0; }
+  }
+  function saveBest() {
+    try { localStorage.setItem('starCatcherBest', String(best)); } catch (e) {}
+  }
 
-    <div class="hero-body">
-      <p class="hero-hi reveal-left">Hi, I'm</p>
-      <h1 class="hero-name reveal-left">Subhasree <span class="purple">Babu.</span></h1>
-      <p class="hero-sub reveal-left">
-        I build clean, reliable software<br />
-        &amp; web applications.
-      </p>
-      <a href="assets/Subhasree-Babu-Resume.docx" download class="resume-btn reveal-left">
-        <i class="fas fa-download"></i>&nbsp; Download Resume
-      </a>
-    </div>
+  function startGame() {
+    score = 0; lives = START_LIVES; timeLeft = GAME_TIME;
+    items = []; basketX = W / 2; spawnTimer = 0;
+    state = 'play';
+  }
 
-    <div class="computer-canvas-wrap">
-      <canvas id="computer-canvas" class="computer-canvas"></canvas>
-      <div class="model-loading" id="model-loading"><span></span></div>
-    </div>
+  function endGame() {
+    state = 'over';
+    overAt = performance.now();
+    if (score > best) { best = score; saveBest(); }
+  }
 
-    <div class="hero-rings" aria-hidden="true">
-      <span class="ring ring-1"></span>
-      <span class="ring ring-2"></span>
-    </div>
+  // Start / restart; short pause after game over avoids accidental restarts
+  function tryStart() {
+    if (state === 'play') return;
+    if (state === 'over' && performance.now() - overAt < 500) return;
+    startGame();
+  }
 
-    <div class="scroll-wrap">
-      <a href="#about" class="scroll-pill">
-        <div class="scroll-dot"></div>
-      </a>
-    </div>
-  </section>
+  function fallSpeed() { return BASE_FALL + FALL_STEP * Math.floor(score / 10); }
 
-  <!-- ───────────── ABOUT ───────────── -->
-  <section class="sec" id="about">
-    <div class="sec-label reveal-left">
-      <p class="sec-sub">Introduction</p>
-      <h2 class="sec-title">Overview.</h2>
-    </div>
-    <p class="about-text reveal-up">
-      Computer Science student at Anglia Ruskin University with strong analytical and problem-solving skills,
-      experienced in developing software applications and technical solutions using Java, Spring Boot, Python,
-      C++, C#, and TypeScript. Knowledgeable in algorithms, data structures, object-oriented programming,
-      databases, and software development methodologies. Quick to learn new technologies and adaptable across
-      software engineering, technical analysis, and systems development. Passionate about building efficient,
-      reliable solutions and continuously developing technical and professional skills.
-    </p>
-    <div class="service-grid">
-      <div class="service-card reveal-up">
-        <div class="grad-border">
-          <div class="card-inner">
-            <span class="svc-badge badge-1"><i class="fas fa-code svc-icon"></i></span>
-            <h3>Software Engineer</h3>
-          </div>
-        </div>
-      </div>
-      <div class="service-card reveal-up">
-        <div class="grad-border">
-          <div class="card-inner">
-            <span class="svc-badge badge-2"><i class="fas fa-layer-group svc-icon"></i></span>
-            <h3>Full-Stack Developer</h3>
-          </div>
-        </div>
-      </div>
-      <div class="service-card reveal-up">
-        <div class="grad-border">
-          <div class="card-inner">
-            <span class="svc-badge badge-3"><i class="fas fa-server svc-icon"></i></span>
-            <h3>Backend Developer</h3>
-          </div>
-        </div>
-      </div>
-      <div class="service-card reveal-up">
-        <div class="grad-border">
-          <div class="card-inner">
-            <span class="svc-badge badge-4"><i class="fas fa-brain svc-icon"></i></span>
-            <h3>Problem Solver</h3>
-          </div>
-        </div>
-      </div>
-      <div class="service-card reveal-up">
-        <div class="grad-border">
-          <div class="card-inner">
-            <span class="svc-badge badge-1"><i class="fas fa-desktop svc-icon"></i></span>
-            <h3>IT &amp; Systems</h3>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
+  function spawn() {
+    var r = 14;
+    items.push({
+      x: r + Math.random() * (W - 2 * r), y: -r, r: r,
+      rock: Math.random() < ROCK_CHANCE
+    });
+  }
 
-  <!-- ───────────── EXPERIENCE & EDUCATION ───────────── -->
-  <section class="sec" id="experience">
-    <div class="sec-label reveal-left">
-      <p class="sec-sub">What I have done so far</p>
-      <h2 class="sec-title">Education &amp; Experience.</h2>
-    </div>
-    <div class="timeline">
+  function update(dt) {
+    if (state !== 'play') return;
 
-      <!-- Education 1 -->
-      <div class="tl-item reveal-up">
-        <div class="tl-icon"><i class="fas fa-graduation-cap"></i></div>
-        <div class="tl-card">
-          <h3 class="tl-title">BSc Computer Science</h3>
-          <p class="tl-company">Anglia Ruskin University — Cambridge, UK</p>
-          <p class="tl-date">September 2023 – August 2026 (Expected)</p>
-          <ul class="tl-points">
-            <li>Relevant modules: Data Structures &amp; Algorithms, Software Engineering, Database Design &amp; Implementation, Cloud Computing, AI, Digital Security, Network Routing, Image Processing.</li>
-            <li>Achieved 1st place in university group project (Together Culture Platform).</li>
-            <li>Applying Agile, OOP, and clean architecture principles across coursework and projects.</li>
-          </ul>
-        </div>
-      </div>
+    timeLeft -= dt;
+    if (timeLeft <= 0) { timeLeft = 0; endGame(); return; }
 
-      <!-- Education 2 -->
-      <div class="tl-item reveal-up">
-        <div class="tl-icon"><i class="fas fa-school"></i></div>
-        <div class="tl-card">
-          <h3 class="tl-title">Higher Secondary (GCSE)</h3>
-          <p class="tl-company">St. Joseph Of Cluny Hr.Sec. School — India</p>
-          <p class="tl-date">May 2022 &nbsp;|&nbsp; Grade: 80%</p>
-          <ul class="tl-points">
-            <li>Achieved 80% in Higher Secondary Education with strong academic performance across all subjects.</li>
-            <li>Developed strong quantitative and logical reasoning through mathematics and science coursework.</li>
-            <li>Recognised for commitment, discipline, and dedication throughout academic development.</li>
-          </ul>
-        </div>
-      </div>
+    if (keys.left) basketX -= BASKET_SPEED * dt;
+    if (keys.right) basketX += BASKET_SPEED * dt;
+    basketX = Math.max(BASKET_W / 2, Math.min(W - BASKET_W / 2, basketX));
 
-      <!-- Experience 1 -->
-      <div class="tl-item reveal-up">
-        <div class="tl-icon"><i class="fas fa-robot"></i></div>
-        <div class="tl-card">
-          <h3 class="tl-title">AI Framework Developer Intern</h3>
-          <p class="tl-company">Praison Limited (PraisonAI) — Remote, London, UK</p>
-          <p class="tl-date">June 2026 – Present</p>
-          <ul class="tl-points">
-            <li>Built and executed multi-agent AI pipelines using the PraisonAI Python framework, orchestrating sequential workflows across CodeAnalyzer, SecurityChecker, and PerformanceChecker agents to automate code quality review on live Python projects.</li>
-            <li>Developed and deployed a fully functional Discord bot powered by a PraisonAI agent, handling end-to-end setup including bot token configuration, OpenAI API integration, and local server deployment to enable real-time AI-driven responses.</li>
-            <li>Set up and maintained a local Python development environment for the PraisonAI open-source codebase, managing virtual environments, package dependencies, and Windows PowerShell configurations to ensure consistent execution across workflows.</li>
-            <li>Authored Python scripts using the praisonaiagents library to define and customise multi-agent systems, assigning specialised roles, instructions, and tasks to individual agents based on project requirements.</li>
-            <li>Independently researched cutting-edge AI models including Qwen-AgentWorld and Nex-N2, translating complex technical concepts into clear video demonstrations that received direct praise from senior team members.</li>
-            <li>Delivered structured test reports and agent execution outputs to the engineering team via the project tracker, supporting iterative development and maintaining visibility across active tasks.</li>
-            <li>Contributed to a real production AI product used by developers globally, working end-to-end across setup, development, testing, and delivery within a fast-paced Agile startup environment.</li>
-          </ul>
-        </div>
-      </div>
+    spawnTimer -= dt;
+    if (spawnTimer <= 0) { spawn(); spawnTimer = SPAWN_EVERY; }
 
-      <!-- Experience 2 -->
-      <div class="tl-item reveal-up">
-        <div class="tl-icon"><i class="fas fa-store"></i></div>
-        <div class="tl-card">
-          <h3 class="tl-title">Retail Assistant</h3>
-          <p class="tl-company">GREGGS — Cambridge, United Kingdom</p>
-          <p class="tl-date">April 2024 – Present</p>
-          <ul class="tl-points">
-            <li>Delivered excellent customer service in a fast-paced retail environment.</li>
-            <li>Developed strong teamwork and communication skills through daily customer interactions.</li>
-            <li>Managed multiple responsibilities efficiently while maintaining high operational standards.</li>
-            <li>Demonstrated adaptability, problem-solving, and time management in a busy workplace.</li>
-          </ul>
-        </div>
-      </div>
+    var speed = fallSpeed();
+    for (var i = items.length - 1; i >= 0; i--) {
+      var it = items[i];
+      it.y += speed * dt;
+      var caught = it.y + it.r >= BASKET_Y && it.y - it.r <= BASKET_Y + BASKET_H &&
+                   Math.abs(it.x - basketX) <= BASKET_W / 2 + it.r * 0.5;
+      if (caught) {
+        items.splice(i, 1);
+        if (it.rock) { lives--; if (lives <= 0) { endGame(); return; } }
+        else score++;
+      } else if (it.y - it.r > H) {
+        items.splice(i, 1);
+      }
+    }
+  }
 
-      <!-- Experience 3 -->
-      <div class="tl-item reveal-up">
-        <div class="tl-icon"><i class="fas fa-laptop-code"></i></div>
-        <div class="tl-card">
-          <h3 class="tl-title">IT &amp; System Support Intern</h3>
-          <p class="tl-company">TVS Motors — Karaikal, Pondicherry, India</p>
-          <p class="tl-date">June – August 2022</p>
-          <ul class="tl-points">
-            <li>Provided technical assistance for showroom systems, software, and internal tools.</li>
-            <li>Assisted in maintaining digital records, inventory systems, and operational databases.</li>
-            <li>Analysed and organised business data using spreadsheets and reporting tools.</li>
-            <li>Supported staff with troubleshooting technical and system-related issues.</li>
-            <li>Gained experience in a professional team environment with operational technologies.</li>
-          </ul>
-        </div>
-      </div>
+  // ---------- drawing ----------
+  function drawStar(x, y, r) {
+    ctx.beginPath();
+    for (var i = 0; i < 10; i++) {
+      var a = -Math.PI / 2 + i * Math.PI / 5;
+      var rad = i % 2 === 0 ? r : r * 0.45;
+      ctx.lineTo(x + Math.cos(a) * rad, y + Math.sin(a) * rad);
+    }
+    ctx.closePath();
+    ctx.fillStyle = '#ffd83b';
+    ctx.fill();
+  }
 
-    </div>
-  </section>
+  function drawRock(x, y, r) {
+    var shape = [1, 0.8, 0.95, 0.75, 1, 0.85, 0.9, 0.78];
+    ctx.beginPath();
+    for (var i = 0; i < shape.length; i++) {
+      var a = i * Math.PI * 2 / shape.length;
+      ctx.lineTo(x + Math.cos(a) * r * shape[i], y + Math.sin(a) * r * shape[i]);
+    }
+    ctx.closePath();
+    ctx.fillStyle = '#d93636';
+    ctx.fill();
+    ctx.strokeStyle = '#7a1414';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
 
-  <!-- ───────────── SKILLS ───────────── -->
-  <section class="sec" id="skills">
-    <div class="sec-label reveal-left">
-      <p class="sec-sub">What I work with</p>
-      <h2 class="sec-title">Technical Skills.</h2>
-    </div>
+  function drawBasket() {
+    var l = basketX - BASKET_W / 2, r = basketX + BASKET_W / 2;
+    ctx.beginPath();
+    ctx.moveTo(l, BASKET_Y);
+    ctx.lineTo(r, BASKET_Y);
+    ctx.lineTo(r - 10, BASKET_Y + BASKET_H);
+    ctx.lineTo(l + 10, BASKET_Y + BASKET_H);
+    ctx.closePath();
+    ctx.fillStyle = '#b5762a';
+    ctx.fill();
+    ctx.fillStyle = '#e0a04a';
+    ctx.fillRect(l - 3, BASKET_Y - 4, BASKET_W + 6, 6);
+  }
 
-    <p class="skills-category-label reveal-left">Frontend</p>
-    <div class="balls-grid" id="frontend-balls">
-      <div class="ball-wrap reveal-up"><div class="skill-ball"><span>HTML</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball"><span>CSS</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball"><span>JavaScript</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball"><span>TypeScript</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball"><span>React JS</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball"><span>Next.js</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball"><span>Tailwind CSS</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball"><span>React Native</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball"><span>Bootstrap</span></div></div>
-    </div>
+  function text(str, x, y, size, color, align) {
+    ctx.font = 'bold ' + size + 'px sans-serif';
+    ctx.fillStyle = color || '#fff';
+    ctx.textAlign = align || 'center';
+    ctx.fillText(str, x, y);
+  }
 
-    <p class="skills-category-label reveal-left">Backend &amp; Databases</p>
-    <div class="balls-grid" id="backend-balls">
-      <div class="ball-wrap reveal-up"><div class="skill-ball ball-backend"><span>Java</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball ball-backend"><span>Spring Boot</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball ball-backend"><span>Python</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball ball-backend"><span>C</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball ball-backend"><span>C++</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball ball-backend"><span>C#</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball ball-backend"><span>Node.js</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball ball-backend"><span>MySQL</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball ball-backend"><span>MongoDB</span></div></div>
-    </div>
+  function draw() {
+    ctx.fillStyle = '#0b1030';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#39406e';
+    for (var i = 0; i < sky.length; i++) ctx.fillRect(sky[i][0], sky[i][1], sky[i][2], sky[i][2]);
 
-    <p class="skills-category-label reveal-left">Tools &amp; Platforms</p>
-    <div class="balls-grid" id="tools-balls">
-      <div class="ball-wrap reveal-up"><div class="skill-ball ball-tools"><span>Git</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball ball-tools"><span>GitHub</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball ball-tools"><span>GitLab</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball ball-tools"><span>Docker</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball ball-tools"><span>Kubernetes</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball ball-tools"><span>Firebase</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball ball-tools"><span>Clerk</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball ball-tools"><span>Vite</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball ball-tools"><span>Expo</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball ball-tools"><span>Figma</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball ball-tools"><span>Postman</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball ball-tools"><span>Rapid API</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball ball-tools"><span>REST APIs</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball ball-tools"><span>Agile</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball ball-tools"><span>PraisonAI</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball ball-tools"><span>Multi-Agent Systems</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball ball-tools"><span>OpenAI API</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball ball-tools"><span>PowerShell</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball ball-tools"><span>Test Automation</span></div></div>
-      <div class="ball-wrap reveal-up"><div class="skill-ball ball-tools"><span>Microservices</span></div></div>
-    </div>
-  </section>
+    if (state === 'start') {
+      drawStar(W / 2, 200, 48);
+      text('Star Catcher', W / 2, 310, 48, '#ffd83b');
+      text('Press Space to start', W / 2, 380, 22);
+      return;
+    }
 
-  <!-- ───────────── PROJECTS ───────────── -->
-  <section class="sec" id="projects">
-    <div class="sec-label reveal-left">
-      <p class="sec-sub">My work</p>
-      <h2 class="sec-title">Projects.</h2>
-    </div>
-    <p class="proj-intro reveal-up">
-      The following projects showcase my skills and experience through real-world examples.
-      Each project reflects my ability to solve complex problems, collaborate in team environments,
-      and deliver effective full-stack solutions.
-    </p>
-    <div class="proj-grid">
+    for (var j = 0; j < items.length; j++) {
+      var it = items[j];
+      if (it.rock) drawRock(it.x, it.y, it.r); else drawStar(it.x, it.y, it.r);
+    }
+    drawBasket();
 
-      <!-- Project 1 -->
-      <div class="proj-card reveal-up" data-tilt>
-        <div class="proj-thumb-wrap">
-          <div class="proj-thumb" style="background: linear-gradient(135deg,#6d28d9,#915eff 60%,#c084fc);"></div>
-          <div class="proj-overlay">
-            <div class="gh-btn"><i class="fab fa-github"></i></div>
-          </div>
-        </div>
-        <div class="proj-body">
-          <h3 class="proj-title">EasyFind</h3>
-          <p class="proj-desc">
-            Local Professional Discovery Application — a full-stack app connecting users with local
-            professionals through radius-based search. Designed backend APIs and database structures
-            to manage user and review data. Built responsive frontend components with a focus on
-            usability, applying clean architecture, modular design, and version control.
-          </p>
-          <div class="proj-tags">
-            <span class="tag">Node.js</span>
-            <span class="tag">MySQL</span>
-            <span class="tag">REST API</span>
-            <span class="tag">JavaScript</span>
-          </div>
-        </div>
-      </div>
+    // HUD
+    text('Score: ' + score, 12, 28, 18, '#fff', 'left');
+    text('Lives: ' + lives, W / 2, 28, 18, '#ff8a8a', 'center');
+    text('Time: ' + Math.ceil(timeLeft), W - 12, 28, 18, '#fff', 'right');
 
-      <!-- Project 2 -->
-      <div class="proj-card reveal-up" data-tilt>
-        <div class="proj-thumb-wrap">
-          <div class="proj-thumb" style="background: linear-gradient(135deg,#1e3a8a,#4c1d95 60%,#6d28d9);"></div>
-          <div class="proj-overlay">
-            <div class="gh-btn"><i class="fab fa-github"></i></div>
-          </div>
-        </div>
-        <div class="proj-body">
-          <h3 class="proj-title">Together Culture Platform</h3>
-          <p class="proj-desc">
-            University team project ranked 1st — a full-stack web platform built with JavaScript,
-            Node.js, REST APIs, and MySQL. Developed frontend and backend functionality using Java
-            and OOP principles. Implemented responsive UI, backend services, application logic, and
-            collaborated using Agile and Git version control.
-          </p>
-          <div class="proj-tags">
-            <span class="tag">JavaScript</span>
-            <span class="tag">Node.js</span>
-            <span class="tag">MySQL</span>
-            <span class="tag">Java</span>
-            <span class="tag">Agile</span>
-          </div>
-        </div>
-      </div>
+    if (state === 'over') {
+      ctx.fillStyle = 'rgba(5, 6, 15, 0.75)';
+      ctx.fillRect(0, 0, W, H);
+      text('Game Over', W / 2, 240, 46, '#ffd83b');
+      text('Final score: ' + score, W / 2, 300, 26);
+      text('Best score: ' + best, W / 2, 340, 22, '#c9d0ff');
+      text('Press Space to play again', W / 2, 410, 22);
+    }
+  }
 
-      <!-- Project 3 -->
-      <div class="proj-card reveal-up" data-tilt>
-        <div class="proj-thumb-wrap">
-          <div class="proj-thumb" style="background: linear-gradient(135deg,#0f766e,#0891b2 60%,#22d3ee);"></div>
-          <div class="proj-overlay">
-            <div class="gh-btn"><i class="fab fa-github"></i></div>
-          </div>
-        </div>
-        <div class="proj-body">
-          <h3 class="proj-title">Study Mate AI</h3>
-          <p class="proj-desc">
-            A study assistant application that helps students make and organise notes, upload existing
-            notes, and automatically generate quizzes from that content to test and improve their
-            understanding. Built independently with a focus on a simple, distraction-free workflow for
-            note-taking and self-testing.
-          </p>
-          <div class="proj-tags">
-            <span class="tag">Java</span>
-            <span class="tag">Python</span>
-            <span class="tag">C++</span>
-            <span class="tag">HTML</span>
-          </div>
-        </div>
-      </div>
+  // ---------- input ----------
+  window.addEventListener('keydown', function (e) {
+    if (e.code === 'ArrowLeft') { keys.left = true; e.preventDefault(); }
+    else if (e.code === 'ArrowRight') { keys.right = true; e.preventDefault(); }
+    else if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) tryStart(); }
+  });
+  window.addEventListener('keyup', function (e) {
+    if (e.code === 'ArrowLeft') keys.left = false;
+    else if (e.code === 'ArrowRight') keys.right = false;
+  });
 
-    </div>
-  </section>
+  function touchMove(e) {
+    e.preventDefault();
+    if (state !== 'play') return;
+    var rect = canvas.getBoundingClientRect();
+    basketX = (e.touches[0].clientX - rect.left) * W / rect.width;
+    basketX = Math.max(BASKET_W / 2, Math.min(W - BASKET_W / 2, basketX));
+  }
+  canvas.addEventListener('touchstart', function (e) {
+    // No Space key on phones, so a tap starts / restarts the game
+    if (state !== 'play') { e.preventDefault(); tryStart(); return; }
+    touchMove(e);
+  }, { passive: false });
+  canvas.addEventListener('touchmove', touchMove, { passive: false });
 
-  <!-- ───────────── CONTACT ───────────── -->
-  <section class="sec" id="contact">
-    <div class="sec-label reveal-left">
-      <p class="sec-sub">Get in touch</p>
-      <h2 class="sec-title">Contact.</h2>
-    </div>
-    <div class="contact-layout">
-      <form class="contact-form reveal-up" id="contact-form">
-        <label for="name">Your Name</label>
-        <input type="text" id="name" placeholder="What's your name?" required />
-        <label for="email">Your Email</label>
-        <input type="email" id="email" placeholder="What's your email?" required />
-        <label for="message">Your Message</label>
-        <textarea id="message" rows="6" placeholder="What would you like to say?" required></textarea>
-        <button type="submit" class="send-btn">
-          Send Message &nbsp;<i class="fas fa-paper-plane"></i>
-        </button>
-      </form>
-
-      <div class="contact-info reveal-up">
-        <div class="info-item">
-          <span class="info-icon"><i class="fas fa-envelope"></i></span>
-          <a href="mailto:subhasreebabu11.b@gmail.com">subhasreebabu11.b@gmail.com</a>
-        </div>
-        <div class="info-item">
-          <span class="info-icon"><i class="fas fa-phone"></i></span>
-          <span>+44 7717 665409</span>
-        </div>
-        <div class="info-item">
-          <span class="info-icon"><i class="fas fa-map-marker-alt"></i></span>
-          <span>Cambridge, UK</span>
-        </div>
-        <div class="socials">
-          <a href="https://linkedin.com/in/subhasree-babu-26b660266/" target="_blank" rel="noopener" class="soc-link" aria-label="LinkedIn"><i class="fab fa-linkedin-in"></i></a>
-          <a href="https://github.com" target="_blank" rel="noopener" class="soc-link" aria-label="GitHub"><i class="fab fa-github"></i></a>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ───────────── FOOTER ───────────── -->
-  <footer>
-    <div class="footer-inner">
-      <p class="footer-name">Subhasree Babu</p>
-      <p class="footer-copy">&copy; 2026 All rights reserved.</p>
-      <p class="footer-credit">
-        3D model: "Gaming Desktop PC" by
-        <a href="https://sketchfab.com/Yolala1232" target="_blank" rel="noopener">Yolala1232</a>
-        on <a href="https://sketchfab.com/3d-models/gaming-desktop-pc-d1d8282c9916438091f11aeb28787b66" target="_blank" rel="noopener">Sketchfab</a>,
-        licensed <a href="http://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC-BY-4.0</a>.
-      </p>
-    </div>
-  </footer>
-
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
-  <script src="vendor/GLTFLoader.js"></script>
-  <script src="vendor/OrbitControls.js"></script>
-  <script src="script.js"></script>
+  // ---------- main loop ----------
+  var last = performance.now();
+  function frame(now) {
+    var dt = Math.min((now - last) / 1000, 0.05);
+    last = now;
+    update(dt);
+    draw();
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
 </body>
 </html>
